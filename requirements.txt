@@ -1,0 +1,16 @@
+cv2
+google
+unidecode
+future
+selenium
+simplejson
+Pillow
+opencv-contrib-python
+pytesseract
+beautifulsoup4
+pyscreenshot
+lxml
+wikipedia
+wxPython
+git+https://github.com/abenassi/Google-Search-API/
+halo
