@@ -5,7 +5,6 @@ import wikipedia
 import urllib.request as urllib2
 # import request
 from bs4 import BeautifulSoup
-from google import google
 from PIL import Image
 import pytesseract
 import argparse
@@ -14,7 +13,6 @@ import os
 import pyscreenshot as Imagegrab
 import sys
 import wx
-from halo import Halo
 from googleapiclient.discovery import build
 import pprint
 import numpy as np
@@ -25,18 +23,6 @@ my_cse_id = "014360726765778517958:hnpiknbfyzk"
 pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files (x86)\\Tesseract-OCR\\tesseract'
 
 
-# for terminal colors
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-
-
 # sample questions from previous games
 sample_questions = {}
 
@@ -45,16 +31,6 @@ remove_words = []
 
 # negative words
 negative_words = []
-
-
-# GUI interface
-def gui_interface():
-    app = wx.App()
-    frame = wx.Frame(None, -1, 'win.py')
-    # frame.SetDimensions(0, 0, 1200, 1200)
-    frame.Show()
-    app.MainLoop()
-    return None
 
 
 # load sample questions
@@ -69,7 +45,7 @@ def load_json():
 # take screenshot of question 
 def screen_grab(to_save):
     # 31,228 485,620 co-ords of screenshot// left side of screen
-    im = Imagegrab.grab(bbox=(650, 385, 1250, 1000))
+    im = Imagegrab.grab(bbox=(30, 400, 450, 800))
     im.save(to_save, dpi=(600,600))
 
 def google_search(search_term, api_key, cse_id, **kwargs):
@@ -96,29 +72,33 @@ def read_screen():
     # load the image
     image = cv2.imread(args["image"])
 
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    img = cv2.bitwise_not(gray) 
+    rgb = cv2.pyrDown(image)
+    small = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    grad = cv2.morphologyEx(small, cv2.MORPH_GRADIENT, kernel)
 
-    if args["preprocess"] == "thresh":
-        gray = cv2.threshold(img, 60, 120,
-                             cv2.THRESH_OTSU)[1]
+    _, bw = cv2.threshold(grad, 0.0, 255.0, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
 
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 1))
+    connected = cv2.morphologyEx(bw, cv2.MORPH_CLOSE, kernel)
+    _, contours, hierarchy = cv2.findContours(connected.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    mask = np.zeros(bw.shape, dtype=np.uint8)
+    for idx in range(len(contours)):
+        x, y, w, h = cv2.boundingRect(contours[idx])
+        mask[y:y+h, x:x+w] = 0
+        cv2.drawContours(mask, contours, idx, (255, 255, 255), -1)
+        r = float(cv2.countNonZero(mask[y:y+h, x:x+w])) / (w * h)
 
-    # filename = "Screens/{}.png".format(os.getpid())
-    # cv2.imwrite(filename, gray)
+        if r > 0.45 and w > 8 and h > 8:
+            cv2.rectangle(rgb, (x, y), (x+w-1, y+h-1), (0, 255, 0), 2)
 
-    col = Image.fromarray(gray)
+    cv2.imshow('rects', rgb)
+    
+
 
     # col = Image.open(filename)
-    # col.show()
-    area = (0, 0, 80, 400)
-    cropped_img = col.crop(area)
-    # cropped_img.show()
-    col.paste(cropped_img, (44, 140, 124, 540))
-    col.paste(cropped_img, (450, 140, 530, 540))
-    # col.show()
-
-    text = pytesseract.image_to_string(col)
+    # print(image)
+    text = pytesseract.image_to_string(image)
 
     # spinner.succeed()
     # spinner.stop()
@@ -204,15 +184,6 @@ def split_string(source):
     return output
 
 
-# normalize points // get rid of common appearances // "quote" wiki option + ques
-def normalize():
-    return None
-
-
-# take screen shot of screen every 2 seconds and check for question
-def check_screen():
-    return None
-
 
 # answer by combining two words
 def smart_answer(content, qwords):
@@ -268,24 +239,6 @@ def google_wiki(sim_ques, options, neg, simq):
     return maxo
 
 
-# return points for sample_questions
-def get_points_sample():
-    simq = ""
-    x = 0
-    for key in sample_questions:
-        x = x + 1
-        points = []
-        simq, neg = simplify_ques(key)
-        options = sample_questions[key]
-        simq = simq.lower()
-        maxo = ""
-        points, maxo = google_wiki(simq, options, neg)
-        print("\n" + str(x) + ". " + bcolors.UNDERLINE + key + bcolors.ENDC + "\n")
-        for point, option in zip(points, options):
-            if maxo == option.lower():
-                option = bcolors.OKGREEN + option + bcolors.ENDC
-            print(option + " { points: " + bcolors.BOLD + str(point) + bcolors.ENDC + " }\n")
-
 
 # return points for live game // by screenshot
 def get_points_live():
@@ -304,11 +257,6 @@ def get_points_live():
     print(maxo)
 
 
-# print("\n" + bcolors.UNDERLINE + question + bcolors.ENDC + "\n")
-# for point, option in zip(points, options):
-# 	if maxo == option.lower():
-# 		option=bcolors.OKGREEN+option+bcolors.ENDC
-# 	print(option + " { points: " + bcolors.BOLD + str(point*m) + bcolors.ENDC + " }\n")
 
 
 # menu// main func
@@ -318,7 +266,7 @@ if __name__ == "__main__":
     load_json()
     while (1):
         keypressed = input(
-            bcolors.WARNING + '\nPress s to screenshot live game, sampq to run against sample questions or q to quit:\n' + bcolors.ENDC)
+            '\nPress s to screenshot live game, sampq to run against sample questions or q to quit:\n')
         if keypressed == 's':
             get_points_live()
         elif keypressed == 'sampq':
@@ -326,4 +274,4 @@ if __name__ == "__main__":
         elif keypressed == 'q':
             break
         else:
-            print(bcolors.FAIL + "\nUnknown input" + bcolors.ENDC)
+            print( "\nUnknown input")

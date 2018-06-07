@@ -1,4 +1,4 @@
-cv2
+opencv-python
 google
 unidecode
 future
@@ -10,7 +10,6 @@ pytesseract
 beautifulsoup4
 pyscreenshot
 lxml
-wikipedia
 wxPython
-git+https://github.com/abenassi/Google-Search-API/
-halo
+requests
+google-api-python-client

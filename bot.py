@@ -8,14 +8,15 @@ import os
 from PIL import Image
 import pyscreenshot as Imagegrab
 import re
+from urllib.request import urlopen
 import pytesseract
-
+from bs4 import BeautifulSoup
 CLOUD_VISION_ENDPOINT_URL = 'https://vision.googleapis.com/v1/images:annotate'
 pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files (x86)\\Tesseract-OCR\\tesseract'
 from googleapiclient.discovery import build
 import pprint
 
-api_key = "AIzaSyDlXKsek_dioC8VVCNtOy1S_Wxqm--Q5qI"
+api_key = "AIzaSyASDfmfsVIjyfgayCOv24Y3Hq-USDt8DUk"
 cse_id = "014360726765778517958:hnpiknbfyzk"
 
 # print(argv[1])
@@ -33,22 +34,53 @@ def google_search(search_term, api_key, cse_id, **kwargs):
     res = service.cse().list(q=search_term, cx=cse_id, **kwargs).execute()
     return res['items']
 
+
+
 def scores_with_options(question,options,**kwargs):
     service = build("customsearch", "v1", developerKey=api_key)
     scores = [0,0,0]
     for idx, option in enumerate(options):
-        res = service.cse().list(q=question+' '+option, cx=cse_id, **kwargs).execute()
+        res = service.cse().list(q=question+' '+option+' wiki', cx=cse_id, **kwargs).execute()
+        # print(res)
         scores[idx] = int(res['searchInformation']['totalResults'])
+    print(scores)
     return scores
 
 def normal_scores(question,options):
-    results = google_search(question, api_key, cse_id, num=10)
+    results = google_search(question, api_key, cse_id, num=3)
     scores = [0,0,0]
+
+    # print(results[0]["link"])
+    
     for idx, result in enumerate(results):
-        snippet = result['snippet']
+        f = urlopen(result["link"])
+        print(result["link"])
+        myfile = f.read()
+        # print (myfile)
+        soup = BeautifulSoup(myfile,"lxml")
+        page = soup.get_text().lower()
+        # print(page)
         for n, option in enumerate(options):
-            occurences = snippet.lower().count(option)
-            scores[n] = occurences+scores[n]
+                # print(n)
+                # words = option.split(' ')
+                # print(option.split(' '))
+                # for word in words:
+                occurences = page.lower().count(option.lower())
+                scores[n] = occurences+scores[n]
+
+    # for idx, result in enumerate(results):
+    #     snippet = result['snippet']
+    #     print(result['link'])
+    #     # print(snippet)
+        # for n, option in enumerate(options):
+        #     # print(n)
+        #     # words = option.split(' ')
+        #     # print(option.split(' '))
+        #     # for word in words:
+        #     occurences = page.lower().count(option.lower())
+        #     scores[n] = occurences+scores[n]
+        print(scores)
+    print(scores)
     return scores
 
 def make_image_data_list(image_filenames):
@@ -89,21 +121,29 @@ def get_text_from_response(response):
     t = response['textAnnotations'][0]
     return (t['description'])
 
-def take_screenshot():
+def take_screenshot(l):
     # os.system("adb exec-out screencap -p > screen.png")
-    im = Imagegrab.grab(bbox=(0, 400+hq, 500, 850+hq))
+    im = Imagegrab.grab(bbox=(30, 410+hq-l, 450, 820+hq+l))
     im.save('screen.png', dpi=(600,600))
 
-def split_screen_to_question_and_options():
+def split_screen_to_question_and_options(n,m):
     i = Image.open('screen.png')
-    width, height = i.size
-    frame = i.crop(((32,10-ho,width-20,120+ho)))
+    width, height = i.size 
+    # print(l)
+    question_end_y = 90+ho+n
+    frame = i.crop(((0,0,width,question_end_y)))
     frame.save('question.png')
-    frame = i.crop(((75,154,width-60,175+ho)))
+
+    one_start = question_end_y+18+ho
+    frame = i.crop(((50,one_start,width-50,one_start+40)))
     frame.save('1.png')
-    frame = i.crop(((75,254,width-60,275+ho)))
+
+    two_start = one_start +80+ ho
+    frame = i.crop(((50,two_start,width-50,two_start+40)))
     frame.save('2.png')
-    frame = i.crop(((75,344,width-60,375+ho)))
+
+    three_start = two_start + 80+ho
+    frame = i.crop(((50,three_start,width-50,three_start + 40)))
     frame.save('3.png')
     # frame.show()
 
@@ -111,6 +151,7 @@ def split_screen_to_question_and_options():
 option_names = ['A','B','C']
 
 def print_scores(scores,method):
+    print(scores)
     print (method+'\n-----------------------------')
     print ("Most relevant : "+ str(option_names[scores.index(max(scores))]))
     print ("Least relevant : "+ str(option_names[scores.index(min(scores))]))
@@ -121,15 +162,25 @@ if __name__ == '__main__':
         
         a = input("Wait for the next question and press Enter key instantly when it's displayed\n")
         
-        
+        ho = int(a)*6+6
+
         if eliminated:
-            hq = 30
-            # ho = 7
+            hq = 35
+            ho=int(a)*7
 
-        ho = ho+int(a)*2
+        l=0
+        m=0
+        n=0
+        if int(a)==4:
+            l=30
+            n=45
+            m=n-20
+            ho=20
 
-        take_screenshot()
-        split_screen_to_question_and_options()
+
+
+        take_screenshot(l)
+        split_screen_to_question_and_options(n,m)
         
         col = Image.open('question.png')
         question = pytesseract.image_to_string(col)
@@ -154,6 +205,6 @@ if __name__ == '__main__':
 
         print(options)
         normal = normal_scores(question,options)
-        print_scores(normal,'Method 1 (Question search)')
-        withoption = scores_with_options(question,options)
-        print_scores(withoption,'Method 2 (Question and options search)')
+        # print_scores(normal,'Method 1 (Question search)')
+        # withoption = scores_with_options(question,options)
+        # print_scores(withoption,'Method 2 (Question and options search)')
